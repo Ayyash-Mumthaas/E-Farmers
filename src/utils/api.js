@@ -1,7 +1,8 @@
 import axios from 'axios';
 
 export async function fetchAiPriceSuggestion({ variety, quantity }) {
-    // Mock API: returns a random fair price around a baseline derived from variety and quantity
+    // Mock API: returns a random fair price around a baseline derived from variety only
+    // Per kg price should be constant regardless of quantity
     const varietyMultipliers = {
         'Samba': 120,
         'Nadu': 100,
@@ -18,9 +19,9 @@ export async function fetchAiPriceSuggestion({ variety, quantity }) {
     };
     
     const basePrice = varietyMultipliers[variety] || 100;
-    const quantityFactor = (quantity || 1) * 0.1;
+    // Remove quantity factor - per kg price should be constant
     const noise = Math.round((Math.random() - 0.5) * basePrice * 0.2);
-    const suggested = Math.max(50, basePrice + quantityFactor + noise);
+    const suggested = Math.max(50, basePrice + noise);
     
     // Mock recommendation based on variety
     const recommendations = {

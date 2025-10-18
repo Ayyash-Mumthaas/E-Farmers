@@ -14,14 +14,15 @@ export default function FarmerDashboard() {
     const fileInputRef = useRef(null);
 
     useEffect(() => {
-        if (form.variety && form.quantity) {
-            fetchAiPriceSuggestion({ name: form.variety, category: form.variety, quantity: Number(form.quantity) })
+        if (form.variety) {
+            // Fetch AI price suggestion based on variety only (per kg price)
+            fetchAiPriceSuggestion({ variety: form.variety, quantity: 1 })
                 .then((res) => setAiPrice(res.price))
                 .catch(() => setAiPrice(null));
         } else {
             setAiPrice(null);
         }
-    }, [form.variety, form.quantity]);
+    }, [form.variety]);
 
     useEffect(() => {
         // Load products

@@ -34,7 +34,8 @@ export default function FarmerDashboard() {
 
   useEffect(() => {
     if (form.variety) {
-      fetchAiPriceSuggestion({ variety: form.variety })
+      // Fetch AI price suggestion based on variety only (per kg price)
+      fetchAiPriceSuggestion({ variety: form.variety, quantity: 1 })
         .then((res) => {
           setAiPrice(res.price);
           setAiRecommendation(res.recommendation);
@@ -146,14 +147,20 @@ export default function FarmerDashboard() {
           <h3 className="text-lg font-semibold text-blue-800 mb-2">
             AI Price Prediction
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
             <div>
               <span className="font-medium">Current Price:</span>
-              <span className="ml-2 text-green-600">LKR {currentPrice}</span>
+              <span className="ml-2 text-green-600">LKR {currentPrice}/kg</span>
             </div>
             <div>
               <span className="font-medium">Predicted Price:</span>
-              <span className="ml-2 text-blue-600">LKR {aiPrice}</span>
+              <span className="ml-2 text-blue-600">LKR {aiPrice}/kg</span>
+            </div>
+            <div>
+              <span className="font-medium">Total Cost:</span>
+              <span className="ml-2 text-purple-600 font-bold">
+                LKR {form.quantity ? (aiPrice * form.quantity).toFixed(2) : '0.00'}
+              </span>
             </div>
             <div>
               <span className="font-medium">Recommendation:</span>
@@ -262,9 +269,14 @@ export default function FarmerDashboard() {
             {isSubmitting ? "Adding..." : "Add Product"}
           </button>
           {aiPrice && (
-            <span className="text-sm text-green-700 font-medium">
-              AI Predicted: LKR {aiPrice} per kg
-            </span>
+            <div className="text-sm text-green-700 font-medium">
+              <div>AI Predicted: LKR {aiPrice} per kg</div>
+              {form.quantity > 0 && (
+                <div className="text-purple-600 font-bold">
+                  Total Value: LKR {(aiPrice * form.quantity).toFixed(2)}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </form>
