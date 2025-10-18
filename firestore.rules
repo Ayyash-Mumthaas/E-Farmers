@@ -103,17 +103,18 @@ service cloud.firestore {
       allow create: if isAuthenticated() && 
         request.auth.uid == request.resource.data.ownerUid &&
         request.resource.data.keys().hasAll(['variety', 'quantity', 'location', 'ownerUid', 'createdAt']) &&
-        isValidProductVariety() &&
-        isValidQuantity() &&
+        request.resource.data.variety is string &&
+        request.resource.data.variety.size() > 0 &&
+        request.resource.data.quantity is number &&
+        request.resource.data.quantity >= 0 &&
         request.resource.data.location is string &&
         request.resource.data.location.size() >= 2 &&
         request.resource.data.ownerUid is string &&
-        isValidPrice() &&
-        isValidImageUrl() &&
-        // Optional fields validation
+        // Optional fields validation - more lenient
         (!('aiPrice' in request.resource.data) || (request.resource.data.aiPrice is number && request.resource.data.aiPrice >= 0)) &&
         (!('name' in request.resource.data) || request.resource.data.name is string) &&
-        (!('category' in request.resource.data) || request.resource.data.category is string);
+        (!('category' in request.resource.data) || request.resource.data.category is string) &&
+        (!('imageUrl' in request.resource.data) || request.resource.data.imageUrl is string);
       
       // Only product owners can update/delete their products
       allow update, delete: if isAuthenticated() && 

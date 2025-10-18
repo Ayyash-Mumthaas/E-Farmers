@@ -11,6 +11,7 @@ export async function addProduct(product) {
     const user = auth.currentUser;
     console.log('addProduct called with:', product);
     console.log('Current user:', user?.uid);
+    console.log('User authenticated:', !!user);
 
     if (!user) {
         throw new Error('User must be authenticated to add products');
@@ -32,7 +33,34 @@ export async function addProduct(product) {
         productData.category = productData.variety;
     }
 
+    // Validate required fields for Firestore rules
+    const requiredFields = ['variety', 'quantity', 'location', 'ownerUid', 'createdAt'];
+    const missingFields = requiredFields.filter(field => !(field in productData));
+    
+    if (missingFields.length > 0) {
+        console.error('Missing required fields:', missingFields);
+        console.error('Product data:', productData);
+        throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
+    }
+
+    // Validate field types
+    if (typeof productData.variety !== 'string' || productData.variety.length === 0) {
+        throw new Error('Variety must be a non-empty string');
+    }
+    if (typeof productData.quantity !== 'number' || productData.quantity < 0) {
+        throw new Error('Quantity must be a non-negative number');
+    }
+    if (typeof productData.location !== 'string' || productData.location.length < 2) {
+        throw new Error('Location must be a string with at least 2 characters');
+    }
+    
+    // Handle imageUrl field - remove if null/undefined to avoid validation issues
+    if (!productData.imageUrl || productData.imageUrl === null || productData.imageUrl === '') {
+        delete productData.imageUrl;
+    }
+
     console.log('Product data to be saved:', productData);
+    console.log('All required fields present:', requiredFields.every(field => field in productData));
 
     try {
         const docRef = await addDoc(collection(db, 'products'), productData);
@@ -41,6 +69,8 @@ export async function addProduct(product) {
     } catch (error) {
         console.error('Error adding product:', error);
         console.error('Product data that failed:', productData);
+        console.error('Error code:', error.code);
+        console.error('Error message:', error.message);
         throw error;
     }
 }
