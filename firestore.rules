@@ -1,0 +1,59 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Users collection - users can read/write their own data
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      // Allow other authenticated users to read basic user info (for farmer names)
+      allow read: if request.auth != null && 
+        resource.data.keys().hasAll(['name', 'role']) &&
+        resource.data.role in ['farmer', 'buyer'];
+    }
+    
+    // Products collection - farmers can manage their own products, buyers can read all
+    match /products/{productId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.ownerUid &&
+        request.resource.data.keys().hasAll(['name', 'category', 'quantity', 'location', 'ownerUid', 'createdAt']);
+      allow update, delete: if request.auth != null && 
+        request.auth.uid == resource.data.ownerUid;
+      // Allow quantity updates for order processing (system updates)
+      allow update: if request.auth != null && 
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['quantity']);
+    }
+    
+    // Orders collection - users can read their own orders, farmers can read orders for their products
+    match /orders/{orderId} {
+      allow read: if request.auth != null && (
+        request.auth.uid == resource.data.userUid ||  // Buyer can read their own orders
+        request.auth.uid == resource.data.farmerUid   // Farmer can read orders for their products
+      );
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.userUid &&
+        request.resource.data.keys().hasAll(['productId', 'productName', 'category', 'qty', 'userUid', 'farmerUid', 'status', 'createdAt']);
+      allow update: if request.auth != null && (
+        request.auth.uid == resource.data.userUid ||  // Buyer can update their orders
+        request.auth.uid == resource.data.farmerUid   // Farmer can update order status
+      );
+      allow delete: if request.auth != null && request.auth.uid == resource.data.userUid;
+    }
+    
+    // Reviews collection - users can read all reviews, authenticated users can create reviews
+    match /reviews/{reviewId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.authorUid &&
+        request.resource.data.keys().hasAll(['productId', 'rating', 'comment', 'authorUid', 'createdAt']);
+      allow update, delete: if request.auth != null && 
+        request.auth.uid == resource.data.authorUid;
+    }
+    
+    // Deny all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

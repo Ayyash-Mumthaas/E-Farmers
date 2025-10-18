@@ -1,0 +1,15 @@
+flask
+flask-cors
+pandas
+matplotlib
+statsmodels
+joblib
+firebase-admin
+requests
+flask
+flask-cors
+pandas
+matplotlib
+statsmodels
+firebase-admin
+joblib
