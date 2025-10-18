@@ -17,7 +17,9 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow create: if request.auth != null && 
         request.auth.uid == request.resource.data.ownerUid &&
-        request.resource.data.keys().hasAll(['name', 'category', 'quantity', 'location', 'ownerUid', 'createdAt']);
+        request.resource.data.keys().hasAll(['quantity', 'location', 'ownerUid', 'createdAt']) &&
+        (request.resource.data.keys().hasAny(['name', 'variety'])) &&
+        (request.resource.data.keys().hasAny(['category', 'variety']));
       allow update, delete: if request.auth != null && 
         request.auth.uid == resource.data.ownerUid;
       // Allow quantity updates for order processing (system updates)

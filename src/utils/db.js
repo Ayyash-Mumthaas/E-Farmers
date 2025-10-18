@@ -9,8 +9,8 @@ export async function listProducts() {
 
 export async function addProduct(product) {
     const user = auth.currentUser;
-    // console.log('addProduct called with:', product);
-    // console.log('Current user:', user?.uid);
+    console.log('addProduct called with:', product);
+    console.log('Current user:', user?.uid);
 
     if (!user) {
         throw new Error('User must be authenticated to add products');
@@ -22,14 +22,25 @@ export async function addProduct(product) {
         createdAt: Date.now(),
     };
 
-    // console.log('Product data to be saved:', productData);
+    // Ensure we have the required fields for Firestore rules
+    // Map variety to name if name is not provided
+    if (!productData.name && productData.variety) {
+        productData.name = productData.variety;
+    }
+    // Map variety to category if category is not provided
+    if (!productData.category && productData.variety) {
+        productData.category = productData.variety;
+    }
+
+    console.log('Product data to be saved:', productData);
 
     try {
         const docRef = await addDoc(collection(db, 'products'), productData);
-        // console.log('Product added with ID:', docRef.id);
+        console.log('Product added with ID:', docRef.id);
         return docRef;
     } catch (error) {
         console.error('Error adding product:', error);
+        console.error('Product data that failed:', productData);
         throw error;
     }
 }
