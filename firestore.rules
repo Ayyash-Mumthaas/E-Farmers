@@ -237,7 +237,7 @@ service cloud.firestore {
         request.resource.data.productName is string &&
         request.resource.data.productName.size() > 0 &&
         request.resource.data.quantity is number &&
-        request.resource.data.quantity > 0 &&
+        request.resource.data.quantity >= 0 &&
         request.resource.data.status in ['Pending', 'Accepted', 'Rejected'] &&
         request.resource.data.timestamp is number &&
         request.resource.data.timestamp > 0 &&
