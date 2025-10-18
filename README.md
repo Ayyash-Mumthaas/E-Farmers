@@ -1,4 +1,64 @@
-# React + Vite
+# Paddy3 - Farmer Dashboard
+
+A React + Vite application for farmers to manage their rice products with AI-powered price suggestions.
+
+## Features
+
+- 🌾 Rice product management
+- 🤖 AI price suggestions
+- 📸 Image upload to Firebase Storage
+- 🔐 User authentication
+- 📍 Sri Lankan location support
+
+## Firebase CORS Fix
+
+To fix the Firebase Storage CORS issue during development:
+
+1. **Create a file named `cors.json` in your root directory** (already created)
+2. **Apply CORS rules:**
+   ```bash
+   gsutil cors set cors.json gs://paddy-b479b.appspot.com
+   ```
+3. **Restart your dev server:**
+   ```bash
+   npm run dev
+   ```
+
+### Prerequisites for CORS Fix
+
+1. Install Google Cloud SDK: https://cloud.google.com/sdk/docs/install
+2. Authenticate: `gcloud auth login`
+3. Set project: `gcloud config set project paddy-b479b`
+
+### Alternative: Firebase Console Method
+
+1. Go to Firebase Console → Storage → Rules
+2. Update storage rules to allow authenticated uploads
+3. Deploy rules: `firebase deploy --only storage`
+
+## Development
+
+```bash
+npm install
+npm run dev
+```
+
+## Build
+
+```bash
+npm run build
+```
+
+## Firebase Configuration
+
+The app uses Firebase for:
+- Authentication
+- Firestore Database
+- Storage (for image uploads)
+
+Make sure your `.env` file contains the correct Firebase credentials.
+
+---
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 

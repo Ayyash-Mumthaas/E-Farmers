@@ -10,8 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "auth": "^1.2.3",
     "axios": "^1.12.2",
+    "bcryptjs": "^3.0.2",
+    "date-fns": "^4.1.0",
     "firebase": "^12.4.0",
     "prop-types": "^15.8.1",
     "react": "^19.1.1",

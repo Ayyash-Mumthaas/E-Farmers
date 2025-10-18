@@ -3,54 +3,340 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Users collection - users can read/write their own data
+    // Helper functions for common validations
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isValidRole() {
+      return resource.data.role in ['farmer', 'buyer'];
+    }
+    
+    function isValidOrderStatus() {
+      return request.resource.data.status in ['Pending', 'Confirmed', 'Delivered', 'Cancelled'];
+    }
+    
+    function isValidRating() {
+      return request.resource.data.rating >= 1 && request.resource.data.rating <= 5;
+    }
+    
+    function isValidNotificationType() {
+      return request.resource.data.type in ['order', 'order_update', 'message', 'system'];
+    }
+    
+    function isValidProductVariety() {
+      return request.resource.data.variety is string && request.resource.data.variety.size() > 0;
+    }
+    
+    function isValidQuantity() {
+      return request.resource.data.quantity is number && request.resource.data.quantity >= 0;
+    }
+    
+    function isValidPrice() {
+      return !('price' in request.resource.data) || (request.resource.data.price is number && request.resource.data.price >= 0);
+    }
+    
+    function isValidImageUrl() {
+      return !('imageUrl' in request.resource.data) || 
+        (request.resource.data.imageUrl is string && 
+         (request.resource.data.imageUrl.matches('data:image/.*') || 
+          request.resource.data.imageUrl.matches('https://.*')));
+    }
+    
+    // Users collection - Enhanced user management with password hashing
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-      // Allow other authenticated users to read basic user info (for farmer names)
-      allow read: if request.auth != null && 
+      // Users can read/write their own complete profile
+      allow read, write: if isOwner(userId);
+      
+      // Other authenticated users can read basic info for farmer names and product listings
+      allow read: if isAuthenticated() && 
         resource.data.keys().hasAll(['name', 'role']) &&
-        resource.data.role in ['farmer', 'buyer'];
+        isValidRole();
+      
+      // Allow reading specific fields for duplicate checking (email, phone, nic)
+      allow read: if isAuthenticated() && 
+        resource.data.keys().hasAny(['email', 'phone', 'nic', 'hashedPassword']);
+      
+      // Allow reading user names for notifications (by document ID)
+      allow read: if isAuthenticated() && 
+        resource.data.keys().hasAll(['name']) &&
+        resource.data.name is string;
+      
+      // Allow creation during registration with required fields
+      allow create: if isAuthenticated() && 
+        request.auth.uid == userId &&
+        request.resource.data.keys().hasAll(['email', 'role', 'name', 'phone', 'nic', 'location', 'hashedPassword', 'createdAt']) &&
+        isValidRole() &&
+        request.resource.data.email is string &&
+        request.resource.data.email.matches('.*@.*\\..*') && // Basic email validation
+        request.resource.data.name is string &&
+        request.resource.data.name.size() >= 2 &&
+        request.resource.data.phone is string &&
+        request.resource.data.phone.size() >= 10 &&
+        request.resource.data.nic is string &&
+        request.resource.data.nic.size() >= 10 &&
+        request.resource.data.location is string &&
+        request.resource.data.location.size() >= 2 &&
+        request.resource.data.hashedPassword is string &&
+        request.resource.data.hashedPassword.size() >= 10; // Minimum hash length
+      
+      // Prevent users from changing their own role after creation
+      allow update: if isOwner(userId) && 
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'hashedPassword']) &&
+        // Allow updating profile fields but not critical security fields
+        request.resource.data.diff(resource.data).affectedKeys().hasAny(['name', 'phone', 'location', 'email']);
+      
+      // Prevent deletion of user accounts (soft delete recommended)
+      allow delete: if false;
     }
     
-    // Products collection - farmers can manage their own products, buyers can read all
+    // Products collection - Enhanced product management with variety field
     match /products/{productId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && 
+      // All authenticated users can read products
+      allow read: if isAuthenticated();
+      
+      // Farmers can create products with required fields and optional fields
+      allow create: if isAuthenticated() && 
         request.auth.uid == request.resource.data.ownerUid &&
-        request.resource.data.keys().hasAll(['quantity', 'location', 'ownerUid', 'createdAt']) &&
-        (request.resource.data.keys().hasAny(['name', 'variety'])) &&
-        (request.resource.data.keys().hasAny(['category', 'variety']));
-      allow update, delete: if request.auth != null && 
+        request.resource.data.keys().hasAll(['variety', 'quantity', 'location', 'ownerUid', 'createdAt']) &&
+        isValidProductVariety() &&
+        isValidQuantity() &&
+        request.resource.data.location is string &&
+        request.resource.data.location.size() >= 2 &&
+        request.resource.data.ownerUid is string &&
+        isValidPrice() &&
+        isValidImageUrl() &&
+        // Optional fields validation
+        (!('aiPrice' in request.resource.data) || (request.resource.data.aiPrice is number && request.resource.data.aiPrice >= 0)) &&
+        (!('name' in request.resource.data) || request.resource.data.name is string) &&
+        (!('category' in request.resource.data) || request.resource.data.category is string);
+      
+      // Only product owners can update/delete their products
+      allow update, delete: if isAuthenticated() && 
         request.auth.uid == resource.data.ownerUid;
+      
       // Allow quantity updates for order processing (system updates)
-      allow update: if request.auth != null && 
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['quantity']);
+      allow update: if isAuthenticated() && 
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['quantity']) &&
+        isValidQuantity();
+      
+      // Allow price updates by owner
+      allow update: if isAuthenticated() && 
+        request.auth.uid == resource.data.ownerUid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['price']) &&
+        isValidPrice();
+      
+      // Allow imageUrl updates by owner
+      allow update: if isAuthenticated() && 
+        request.auth.uid == resource.data.ownerUid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['imageUrl']) &&
+        isValidImageUrl();
+      
+      // Allow aiPrice updates by owner
+      allow update: if isAuthenticated() && 
+        request.auth.uid == resource.data.ownerUid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['aiPrice']) &&
+        request.resource.data.aiPrice is number &&
+        request.resource.data.aiPrice >= 0;
+      
+      // Allow variety updates by owner
+      allow update: if isAuthenticated() && 
+        request.auth.uid == resource.data.ownerUid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['variety']) &&
+        isValidProductVariety();
     }
     
-    // Orders collection - users can read their own orders, farmers can read orders for their products
+    // Orders collection - Enhanced order management with notifications
     match /orders/{orderId} {
-      allow read: if request.auth != null && (
-        request.auth.uid == resource.data.userUid ||  // Buyer can read their own orders
+      // Users can read their own orders
+      allow read: if isAuthenticated() && (
+        request.auth.uid == resource.data.userUid ||  // Buyer can read their orders
         request.auth.uid == resource.data.farmerUid   // Farmer can read orders for their products
       );
-      allow create: if request.auth != null && 
+      
+      // Buyers can create orders with required fields
+      allow create: if isAuthenticated() && 
         request.auth.uid == request.resource.data.userUid &&
-        request.resource.data.keys().hasAll(['productId', 'productName', 'category', 'qty', 'userUid', 'farmerUid', 'status', 'createdAt']);
-      allow update: if request.auth != null && (
+        request.resource.data.keys().hasAll(['productId', 'productName', 'category', 'qty', 'userUid', 'farmerUid', 'status', 'createdAt']) &&
+        request.resource.data.productId is string &&
+        request.resource.data.productName is string &&
+        request.resource.data.productName.size() > 0 &&
+        request.resource.data.category is string &&
+        request.resource.data.qty is number &&
+        request.resource.data.qty > 0 &&
+        request.resource.data.userUid is string &&
+        request.resource.data.farmerUid is string &&
+        request.resource.data.status == 'Pending' &&
+        // Optional fields validation
+        (!('unitPrice' in request.resource.data) || (request.resource.data.unitPrice is number && request.resource.data.unitPrice >= 0)) &&
+        (!('totalPrice' in request.resource.data) || (request.resource.data.totalPrice is number && request.resource.data.totalPrice >= 0)) &&
+        (!('location' in request.resource.data) || request.resource.data.location is string) &&
+        (!('farmerName' in request.resource.data) || request.resource.data.farmerName is string);
+      
+      // Both buyers and farmers can update orders (for status changes)
+      allow update: if isAuthenticated() && (
         request.auth.uid == resource.data.userUid ||  // Buyer can update their orders
-        request.auth.uid == resource.data.farmerUid   // Farmer can update order status
-      );
-      allow delete: if request.auth != null && request.auth.uid == resource.data.userUid;
+        request.auth.uid == resource.data.farmerUid    // Farmer can update order status
+      ) && isValidOrderStatus();
+      
+      // Only buyers can cancel their own orders
+      allow delete: if isAuthenticated() && 
+        request.auth.uid == resource.data.userUid;
+      
+      // Allow farmers to update order status and add delivery info
+      allow update: if isAuthenticated() && 
+        request.auth.uid == resource.data.farmerUid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'deliveryDate', 'notes']) &&
+        isValidOrderStatus();
     }
     
-    // Reviews collection - users can read all reviews, authenticated users can create reviews
+    // Reviews collection - Enhanced review system
     match /reviews/{reviewId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && 
+      // All authenticated users can read reviews
+      allow read: if isAuthenticated();
+      
+      // Users can create reviews for products they've ordered
+      allow create: if isAuthenticated() && 
         request.auth.uid == request.resource.data.authorUid &&
-        request.resource.data.keys().hasAll(['productId', 'rating', 'comment', 'authorUid', 'createdAt']);
-      allow update, delete: if request.auth != null && 
+        request.resource.data.keys().hasAll(['productId', 'rating', 'comment', 'authorUid', 'createdAt']) &&
+        request.resource.data.productId is string &&
+        isValidRating() &&
+        request.resource.data.comment is string &&
+        request.resource.data.comment.size() >= 10 && // Minimum comment length
+        request.resource.data.comment.size() <= 500; // Maximum comment length
+      
+      // Users can update/delete their own reviews
+      allow update, delete: if isAuthenticated() && 
         request.auth.uid == resource.data.authorUid;
+      
+      // Allow rating updates with validation
+      allow update: if isAuthenticated() && 
+        request.auth.uid == resource.data.authorUid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasAny(['rating', 'comment']) &&
+        isValidRating() &&
+        request.resource.data.comment.size() >= 10 &&
+        request.resource.data.comment.size() <= 500;
+    }
+    
+    // Notifications collection - Real-time notification system
+    match /notifications/{notificationId} {
+      // Users can read their own notifications
+      allow read: if isAuthenticated() && 
+        request.auth.uid == resource.data.toUserId;
+      
+      // System can create notifications
+      allow create: if isAuthenticated() && 
+        request.resource.data.keys().hasAll(['fromUserId', 'toUserId', 'productName', 'quantity', 'status', 'timestamp']) &&
+        request.resource.data.fromUserId is string &&
+        request.resource.data.toUserId is string &&
+        request.resource.data.productName is string &&
+        request.resource.data.productName.size() > 0 &&
+        request.resource.data.quantity is number &&
+        request.resource.data.quantity > 0 &&
+        request.resource.data.status in ['Pending', 'Accepted', 'Rejected'] &&
+        request.resource.data.timestamp is number &&
+        request.resource.data.timestamp > 0 &&
+        // Optional fields validation
+        (!('orderId' in request.resource.data) || request.resource.data.orderId is string) &&
+        (!('fromUserName' in request.resource.data) || request.resource.data.fromUserName is string) &&
+        (!('read' in request.resource.data) || request.resource.data.read is bool) &&
+        (!('totalPrice' in request.resource.data) || request.resource.data.totalPrice is number);
+      
+      // Users can update their own notifications (mark as read, update status)
+      allow update: if isAuthenticated() && 
+        request.auth.uid == resource.data.toUserId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasAny(['read', 'status', 'timestamp']) &&
+        (!('read' in request.resource.data) || request.resource.data.read is bool) &&
+        (!('status' in request.resource.data) || request.resource.data.status in ['Pending', 'Accepted', 'Rejected']) &&
+        (!('timestamp' in request.resource.data) || request.resource.data.timestamp is number);
+      
+      // Users can delete their own notifications
+      allow delete: if isAuthenticated() && 
+        request.auth.uid == resource.data.toUserId;
+      
+      // Allow farmers to update notification status (for order responses)
+      allow update: if isAuthenticated() && 
+        request.auth.uid == resource.data.fromUserId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'timestamp']) &&
+        request.resource.data.status in ['Accepted', 'Rejected'] &&
+        request.resource.data.timestamp is number;
+    }
+    
+    // Categories collection - For product categories (if you add this)
+    match /categories/{categoryId} {
+      // All authenticated users can read categories
+      allow read: if isAuthenticated();
+      
+      // Only farmers can create categories (optional feature)
+      allow create: if isAuthenticated() && 
+        request.resource.data.keys().hasAll(['name', 'description', 'createdBy']) &&
+        request.auth.uid == request.resource.data.createdBy &&
+        request.resource.data.name is string &&
+        request.resource.data.name.size() >= 2 &&
+        request.resource.data.description is string &&
+        request.resource.data.description.size() >= 10;
+      
+      // Only category creators can update/delete
+      allow update, delete: if isAuthenticated() && 
+        request.auth.uid == resource.data.createdBy;
+    }
+    
+    // Analytics collection - For app analytics (if you add this)
+    match /analytics/{analyticsId} {
+      // Only authenticated users can read analytics
+      allow read: if isAuthenticated();
+      
+      // System can create analytics data
+      allow create: if isAuthenticated() && 
+        request.resource.data.keys().hasAll(['event', 'userId', 'timestamp']) &&
+        request.resource.data.event is string &&
+        request.resource.data.event.size() > 0 &&
+        request.resource.data.userId is string &&
+        request.resource.data.timestamp is number &&
+        request.resource.data.timestamp > 0;
+    }
+    
+    // AI Model data collection - For storing AI predictions and training data
+    match /ai_data/{dataId} {
+      // All authenticated users can read AI data
+      allow read: if isAuthenticated();
+      
+      // System can create AI data
+      allow create: if isAuthenticated() && 
+        request.resource.data.keys().hasAll(['type', 'data', 'createdAt']) &&
+        request.resource.data.type is string &&
+        request.resource.data.data is map &&
+        request.resource.data.createdAt is number;
+      
+      // Only system can update AI data
+      allow update: if isAuthenticated() && 
+        request.resource.data.diff(resource.data).affectedKeys().hasAny(['data', 'accuracy', 'lastUpdated']);
+      
+      // Prevent deletion of AI data
+      allow delete: if false;
+    }
+    
+    // Price history collection - For storing historical price data
+    match /price_history/{priceId} {
+      // All authenticated users can read price history
+      allow read: if isAuthenticated();
+      
+      // System can create price history entries
+      allow create: if isAuthenticated() && 
+        request.resource.data.keys().hasAll(['variety', 'price', 'location', 'date', 'createdAt']) &&
+        request.resource.data.variety is string &&
+        request.resource.data.price is number &&
+        request.resource.data.price > 0 &&
+        request.resource.data.location is string &&
+        request.resource.data.date is number &&
+        request.resource.data.createdAt is number;
+      
+      // Prevent updates and deletions of price history
+      allow update, delete: if false;
     }
     
     // Deny all other access

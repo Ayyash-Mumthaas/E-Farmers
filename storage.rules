@@ -1,0 +1,61 @@
+rules_version = '2';
+
+// Firebase Storage Security Rules for Paddy3 Project
+// Updated with better CORS support and comprehensive permissions
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Images folder - Allow authenticated users to upload and read
+    match /images/{allPaths=**} {
+      // Allow authenticated users to upload images with proper validation
+      allow write: if request.auth != null 
+        && request.resource.size < 10 * 1024 * 1024  // Max 10MB
+        && request.resource.contentType.matches('image/.*');  // Only images
+      
+      // Allow public read access to images (for displaying in app)
+      allow read: if true;
+    }
+    
+    // User profile images - Only owner can upload, public can read
+    match /profiles/{userId}/{allPaths=**} {
+      allow write: if request.auth != null 
+        && request.auth.uid == userId
+        && request.resource.size < 5 * 1024 * 1024  // Max 5MB for profiles
+        && request.resource.contentType.matches('image/.*');
+      allow read: if true;
+    }
+    
+    // Product images - Only authenticated users can upload, public can read
+    match /products/{allPaths=**} {
+      allow write: if request.auth != null 
+        && request.resource.size < 10 * 1024 * 1024  // Max 10MB
+        && request.resource.contentType.matches('image/.*');
+      allow read: if true;
+    }
+    
+    // Temporary uploads - Only authenticated users, auto-cleanup recommended
+    match /temp/{allPaths=**} {
+      allow write: if request.auth != null 
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow read: if request.auth != null;
+    }
+    
+    // Documents folder - For PDFs and other documents
+    match /documents/{allPaths=**} {
+      allow write: if request.auth != null 
+        && request.resource.size < 5 * 1024 * 1024  // Max 5MB
+        && (request.resource.contentType.matches('application/pdf') 
+            || request.resource.contentType.matches('text/.*')
+            || request.resource.contentType.matches('application/msword')
+            || request.resource.contentType.matches('application/vnd.openxmlformats-officedocument.wordprocessingml.document'));
+      allow read: if request.auth != null;
+    }
+    
+    // Public assets - Anyone can read, only authenticated users can write
+    match /public/{allPaths=**} {
+      allow write: if request.auth != null 
+        && request.resource.size < 10 * 1024 * 1024;
+      allow read: if true;
+    }
+  }
+}
